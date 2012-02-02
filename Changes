@@ -1,5 +1,8 @@
 Revision history for MojoX-IOLoop-Throttle
 
+0.01_04   2012-02-01
+        - pod-coverage.t
+        
 0.01_03   2012-02-01
         - autodrop option.
         

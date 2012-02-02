@@ -79,11 +79,11 @@ $throttle->once(drain => sub { $drain_once_text });
 
 # Throttle!
 $throttle->throttle(
-  limit => scalar @domains,     # Play [total number] jobs(callbacks)
-  limit_run => 2,               # But allow not more than 3 running (parallel,incomplete) jobs
+  limit => scalar @domains,     # Play [limit] jobs(callbacks)
+  limit_run => 2,               # But allow not more than [limit_run] running (parallel,incomplete) jobs
 
-  period       => 2,            # 10 seconds
-  limit_period => 4,            # do not start more then 5 jobs per 10 seconds "period"
+  period       => 2,            # seconds
+  limit_period => 4,            # do not start more then [limit_period] jobs per [period] seconds
 
   #delay => 0.1,                # simulate (or not) a little latency between shots (timer resolution)
   cb => $cb,                    # play this callback
