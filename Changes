@@ -1,5 +1,8 @@
 Revision history for MojoX-IOLoop-Throttle
 
+0.01_06   2012-02-01
+        - changet emit_safe to emit because of experimental status
+
 0.01_05   2012-02-01
         - pod-coverage.t
         

@@ -1,8 +1,9 @@
 package MojoX::IOLoop::Throttle;
 use Mojo::Base 'Mojo::EventEmitter';
 
-our $VERSION = '0.01_05';
+our $VERSION = '0.01_06';
 $VERSION = eval $VERSION;
+
 
 use Mojo::IOLoop;
 use Carp 'croak';
@@ -45,7 +46,7 @@ sub throttle {
   if ($period) {
     $self->{period_timer_id} =
       $ioloop->recurring(
-      $period => sub { $period_count = 0; $self->emit_safe('period'); });
+      $period => sub { $period_count = 0; $self->emit('period'); });
   }
 
   $self->{cb_timer_id} = $ioloop->recurring(
@@ -102,7 +103,7 @@ sub end {
   
   # Если исчерпан лимит
   if ( (!$self->{running_count}) and $self->{limit_total} and $self->{count_total} >= $self->{limit_total}) {  
-    $self->emit_safe('finish');
+    $self->emit('finish');
     warn "finish event\n" if $DEBUG;
   }
   return;
@@ -159,7 +160,7 @@ MojoX::IOLoop::Throttle - throttle Mojo events
 
 =head1 VERSION
 
-Version 0.01_03. (DEV)
+Version 0.01_06. (DEV)
 
 =cut
 
@@ -182,7 +183,7 @@ Version 0.01_03. (DEV)
       limit_run => 3,               # But allow not more than [limit_run] running (parallel,incomplete) jobs
     
       period       => 2,            # seconds
-      limit_period => 4,            # do not start more then [limit_period] jobs per [period] seconds 
+      limit_period => 4,            # do not start more than [limit_period] jobs per [period] seconds 
     
       delay => 0.05,                # simulate (or not) a little latency between shots (timer resolution)
       cb => sub {
@@ -216,9 +217,6 @@ Version 0.01_03. (DEV)
 
 =head1 FUNCTIONS
 
-=head2 C<wait>
-
-in progress
 
 =head2 C<end>
 
