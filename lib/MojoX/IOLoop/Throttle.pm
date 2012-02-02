@@ -1,8 +1,8 @@
 package MojoX::IOLoop::Throttle;
 use Mojo::Base 'Mojo::EventEmitter';
 
-our $VERSION = '0.01_02';
-$VERSION = eval { $VERSION };
+our $VERSION = '0.01_03';
+$VERSION = eval $VERSION;
 
 use Mojo::IOLoop;
 use Carp 'croak';
@@ -10,6 +10,9 @@ use Carp 'croak';
 my $DEBUG = $ENV{MOJO_THROTTLE_DEBUG};
 
 has ioloop => sub { Mojo::IOLoop->singleton };
+
+# drop timers on undef $throttle
+has autodrop => 1;
 
 
 sub throttle {
@@ -109,8 +112,8 @@ sub end {
 sub DESTROY {
   my ($self) = @_;
   warn "Destroing $self\n" if $DEBUG;
-
-  $self->drop();
+  
+  $self->drop() if $self->autodrop;
   $self->SUPER::DESTROY() if SUPER->can('DESTROY');
   return;
 }
@@ -156,7 +159,7 @@ MojoX::IOLoop::Throttle - throttle Mojo events
 
 =head1 VERSION
 
-Version 0.00_02
+Version 0.01_03. (DEV)
 
 =cut
 
@@ -202,8 +205,38 @@ Version 0.00_02
 
 =head1 DESCRIPTION
 
-  This is a very first development release. Be patient. Documentation will be soon.
-  You can found some working real-life example in example dir
+  AHTUNG!!!
+
+  This is a very first development release. Be patient. Documentation is in progress.
+  You can find some working real-life examples in 'example' dir.
+  
+  If your are going to use this module now, use subclassing, because all method and options are experimental
+
+
+=head1 FUNCTIONS
+
+=head2 C<wait>
+
+in progress
+
+=head2 C<end>
+
+in progress
+
+=head2 C<wait>
+
+in progress
+
+=head2 C<throttle>
+
+in progress
+
+=head2 C<drop>
+
+in progress
+
+
+  
 
 =head1 AUTHOR
 

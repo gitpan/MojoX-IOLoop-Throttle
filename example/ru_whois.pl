@@ -6,6 +6,19 @@ use MojoX::IOLoop::Throttle;
 
 Find registrars for a list of domains (only .ru) via whois.ripn.net 
 in parallels with some limitations.
+
+Сделать запрос к whois.ripn.net и найти регистратора для списка доменов параллельно
+и с ограничениями:
+- Пытается запустить не больше 4 запросов за 2 секунду. Если успели выполнить
+  4 запроса раньше и они завершились вызовом end, вызывается событие 'drain' до следующего периода
+- Не позволяет запускать что-либо, если 2 запроса не успели окончится. То бишь
+  не позволяет сделать более 2 "открытых соединений".
+- После того, как выполнятся все запросы и последний из них вызовет ->end,
+  вызывает событие 'finish'
+
+
+Cмотрите строки 81-93, остальное можно пропустить
+
 =cut
 
 #BEGIN { $ENV{MOJO_THROTTLE_DEBUG} = 1 }
@@ -57,11 +70,11 @@ my $period_text =      "\n[info] Next period. I have dropped a counter for perio
 
 
 # Events
-$throttle->on(cb     => sub { say $cb_text});
-$throttle->on(finish => sub { say "Finish!!!!!!!!" });
-$throttle->on(drain  => sub { print "." });
-$throttle->on(period => sub { say $period_text });
-$throttle->once(drain => sub {$drain_once_text});
+$throttle->on(cb      => sub { say $cb_text});
+$throttle->on(finish  => sub { say "Finish!!!!!!!!" });
+$throttle->on(drain   => sub { print "." });
+$throttle->on(period  => sub { say $period_text });
+$throttle->once(drain => sub { $drain_once_text });
 
 
 # Throttle!

@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-use Test::More 'no_plan';
+use Test::More tests => 18;
 
 my $CLASS;
 
@@ -45,7 +45,7 @@ SCALE: {
 # Все эти тесты будут выполнены одновременно за 1*$SCALE секунд (параллельно),
 # а результат потом сравним. Иначе мы б охренели ждать и расфигарили что-нить ценное
 
-# DESTROING
+# DESTROING, autodrop is true by defaults
 my $t_destroy_flag;
 my $t_destroy = $CLASS->new();
 
@@ -134,17 +134,25 @@ my ($nfinish_flag);
 my $t_nfinish = $CLASS->new()->throttle(limit => 2, cb => sub {;});
 $t_nfinish->on(finish => sub { $nfinish_flag++ });
 
+#autodrop
+my $autodrop_flag;
+my $dropped = $CLASS->new(autodrop => 0)->throttle(limit_run => 2, cb => sub { $autodrop_flag++ });
+$dropped->DESTROY;
+
+
+
+
 diag
   "Starting loop for a $SCALE seconds (depends on your perfomance).\nPlease, wait...";
 
-# Start loop for a 1 second.
+# Start loop for $SCALE seconds.
 $ioloop->timer(1 * $SCALE => sub { $ioloop->stop() });
 $ioloop->start;
 
 # --------------------------- start ------------------------------------
 # Now let's see wtf (actually, the most of our tests starts right now)?
 
-is $t_destroy_flag, undef, 'DESTROY stops timers!';
+is $t_destroy_flag, undef, 'DESTROY stops timers by default!';
 is $t_stop_flag,    1,     'stop method works great!';
 is $lp_count, 3, 'Ok, period 0.3 have a time to refresh 3 times in 1 second';
 is $lp_flag, ($lp_count + 1) * 2,
@@ -159,6 +167,7 @@ is $running_flag, undef, 'Without cb\'s subscribers throttle drops itself';
 is $finish_count, 2,     "limit works!";
 is $finish_flag,  1,     "Finish event emitted successfully";
 is $nfinish_flag, undef, 'No finish event without ->end(s)';
+is $autodrop_flag, 2, 'Ok, autodrop works';
 
 # ---------------------------- end ----------------------------------------
 
