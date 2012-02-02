@@ -1,4 +1,6 @@
 #!/usr/bin/env perl
+use strict;
+use warnings;
 
 use Test::More tests => 18;
 
@@ -154,7 +156,7 @@ $ioloop->start;
 
 is $t_destroy_flag, undef, 'DESTROY stops timers by default!';
 is $t_stop_flag,    1,     'stop method works great!';
-is $lp_count, 3, 'Ok, period 0.3 have a time to refresh 3 times in 1 second';
+is $lp_count, 3, "Ok, period ${\(0.3 * $SCALE)} have a time to refresh 3 times in $SCALE second";
 is $lp_flag, ($lp_count + 1) * 2,
   'Ok, we have increased the flag for 8 times with limit_period => 2 and period => 0.3s';
 is $lr_flag, (int(1 / 0.3) + 1) * 4, "limit_run works!";

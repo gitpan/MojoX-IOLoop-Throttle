@@ -1,7 +1,7 @@
 package MojoX::IOLoop::Throttle;
 use Mojo::Base 'Mojo::EventEmitter';
 
-our $VERSION = '0.01_06';
+our $VERSION = '0.01_08';
 $VERSION = eval $VERSION;
 
 
@@ -160,7 +160,7 @@ MojoX::IOLoop::Throttle - throttle Mojo events
 
 =head1 VERSION
 
-Version 0.01_06. (DEV)
+Version 0.01_08. (DEV)
 
 =cut
 
