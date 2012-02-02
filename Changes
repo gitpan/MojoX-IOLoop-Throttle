@@ -1,0 +1,9 @@
+Revision history for MojoX-IOLoop-Throttle
+
+0.00_02    2012-02-01
+        - "end" method bug.
+        - Added one example
+
+0.00_01    Date/time
+        First version, released on an unsuspecting world.
+
