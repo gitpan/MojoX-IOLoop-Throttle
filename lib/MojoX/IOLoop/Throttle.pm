@@ -1,7 +1,7 @@
 package MojoX::IOLoop::Throttle;
 use Mojo::Base 'Mojo::EventEmitter';
 
-our $VERSION = '0.01_04';
+our $VERSION = '0.01_05';
 $VERSION = eval $VERSION;
 
 use Mojo::IOLoop;
@@ -165,7 +165,8 @@ Version 0.01_03. (DEV)
 
 
 =head1 SYNOPSIS
-    
+
+    use Mojo::Base -strict;
     use  MojoX::IOLoop::Throttle;
     $|=1;
     
@@ -177,11 +178,11 @@ Version 0.01_03. (DEV)
     
     # Throttle!
     $throttle->throttle(
-      limit => 20,     # Play [total number] jobs(callbacks)
-      limit_run => 3,               # But allow not more than 3 running (parallel,incomplete) jobs
+      limit => 20,                  # Play [limit] jobs(callbacks)
+      limit_run => 3,               # But allow not more than [limit_run] running (parallel,incomplete) jobs
     
-      period       => 2,            # 10 seconds
-      limit_period => 4,            # do not start more then 5 jobs per 10 seconds "period"
+      period       => 2,            # seconds
+      limit_period => 4,            # do not start more then [limit_period] jobs per [period] seconds 
     
       delay => 0.05,                # simulate (or not) a little latency between shots (timer resolution)
       cb => sub {
