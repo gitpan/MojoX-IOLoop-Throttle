@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 18;
+use Test::More 'no_plan';
 
 my $CLASS;
 
@@ -14,11 +14,6 @@ BEGIN {
   use_ok $CLASS;
 }
 
-CROAK: {
-  eval { $CLASS->new->throttle()->throttle() };
-  like $@, qr/running/, 'Calling throttle twice without stopping does croak';
-  isa_ok $CLASS->new->throttle()->drop()->throttle(), $CLASS;
-}
 
 my $ioloop = $CLASS->new()->ioloop;
 
@@ -27,19 +22,19 @@ my $SCALE;
 SCALE: {
   unless ($SCALE = $ENV{THROTTLE_SCALE}) {
 
-    # Определяем производительность, необходимую чтобы выполнить тесты побыстрее
-    my $count;
-    my $id = $ioloop->recurring(0.001 => sub { $count++ });
-    $ioloop->timer(0.2 => sub { $ioloop->drop($id); $ioloop->stop(); });
-    $ioloop->start();
-    $SCALE = int(30 / $count * 10) / 10;
+	# Определяем производительность, необходимую чтобы выполнить тесты побыстрее
+	my $count;
+	my $id = $ioloop->recurring(0.001 => sub { $count++ });
+	$ioloop->timer(0.2 => sub { $ioloop->drop($id); $ioloop->stop(); });
+	$ioloop->start();
+	$SCALE = int(30 / $count * 10) / 10;
 
-    # For fast computers
-    $SCALE = 0.4 if $SCALE < 0.4;
+	# For fast computers
+	$SCALE = 0.4 if $SCALE < 0.4;
 
-    diag "Your ${\ref( $ioloop->iowatcher)} perfomance is $count/0.2 sec. "      
-      . "We will start the loop for test for $SCALE seconds\n. "
-      . "You can pass a new value to the THROTTLE_SCALE enviropment variable";
+	diag "Your ${\ref( $ioloop->iowatcher)} perfomance is $count/0.2 sec. "
+	  . "We will start the loop for test for $SCALE seconds\n. "
+	  . "You can pass a new value to the THROTTLE_SCALE enviropment variable";
   }
 }
 
@@ -52,97 +47,106 @@ my $t_destroy_flag;
 my $t_destroy = $CLASS->new();
 
 $t_destroy->on(cb => sub { $t_destroy_flag = 'fuck' });
-$t_destroy->throttle(limit_period => 1);
+$t_destroy->run();
 $t_destroy->DESTROY();
 
-
-# Stopping
+# 2 Stopping
 my $t_stop_flag;
 my $t_stop = $CLASS->new();
 
 $t_stop->on(cb => sub { $t_stop_flag++; shift->drop() });
-$t_stop->throttle();
+$t_stop->run();
 
-
-# 'limit_period', 'period' event and 'cb' arg in one test! all or nothing
+# 3 'limit_period', 'period' event and 'cb' arg in one test! all or nothing
 my $lp_flag;
 my $lp_count;
-my $t_lp = $CLASS->new();
-
-$t_lp->throttle(
+my $t_lp = $CLASS->new(
   limit_period => 2,
   period       => 0.3 * $SCALE,
   cb           => sub { $lp_flag++ }
 );
+$t_lp->ioloop->timer(0.8 * $SCALE => sub { $t_lp->drop });
+$t_lp->run();
 $t_lp->on(period => sub { $lp_count++ });
 
 
-# limit_run and 'end' event
+# 4 limit_run and 'end' event
 my $lr_flag;
-my $lr = $CLASS->new();
-
-$lr->throttle(
-  limit_run => 4,
-  period    => 0.001,
+my $lr = $CLASS->new(
+  limit_run => 3,
   cb        => sub {
-    my ($thr) = @_;
-    $lr_flag++;
-    $thr->ioloop->timer(0.3 * $SCALE => sub { $thr->end; });
+	my ($thr) = @_;
+	$lr_flag++;
+	$thr->ioloop->timer(0.2 * $SCALE => sub { $thr->end; });
   }
 );
+$lr->ioloop->timer(0.5 * $SCALE => sub {$lr->drop} );
+$lr->run();
 
-
-# drain event
+# 5 drain event
 my $drain_flag;
-my $t_drain = $CLASS->new()->throttle(
+my $t_drain = $CLASS->new(
   limit_period => 1,
   cb           => sub { shift->end }
-);
+  )->run(
+
+  );
 $t_drain->on(drain => sub { $drain_flag++ });
 
 
-# Здесь мы забыли сделать end. А значит drain не вызовется никогда
+# 6 Здесь мы забыли сделать end. А значит drain не вызовется никогда
 my $drain_flag2;
-my $t_drain2 = $CLASS->new()->throttle(limit_period => 1, cb => sub { });
+my $t_drain2 = $CLASS->new(limit_period => 1, cb => sub { })->run();
 $t_drain2->on(drain => sub { $drain_flag2++ });
 
-
-# Если нет коллбека, сервер должен быть остановлен после вызова
-my $running_flag;
-my $t_running = $CLASS->new()->throttle(limit_period => 1);
-$t_running->ioloop->timer(
-  0.1 => sub { $running_flag = $t_running->{is_running} });
-
-
-# finish event
+# 7 finish event
 my ($finish_count, $finish_flag);
-my $t_finish = $CLASS->new()->throttle(
+my $t_finish = $CLASS->new(
   limit => 2,
   cb    => sub {
-    my ($t) = @_;
-    $t->ioloop->timer(
-      0.1 * $SCALE => sub {
-        $finish_count++;
-        $t->end();
-      }
-    );
+	my ($t) = @_;
+	$t->ioloop->timer(
+	  0.1 * $SCALE => sub {
+		$finish_count++;
+		$t->end();
+	  }
+	);
   }
-);
+)->run();
 $t_finish->on(finish => sub { $finish_flag++ });
 
-
-# no finish without ->end
+# 8 no finish without ->end
 my ($nfinish_flag);
-my $t_nfinish = $CLASS->new()->throttle(limit => 2, cb => sub {;});
+my $t_nfinish = $CLASS->new(cb => sub {;})->run();
 $t_nfinish->on(finish => sub { $nfinish_flag++ });
 
-#autodrop
-my $autodrop_flag;
-my $dropped = $CLASS->new(autodrop => 0)->throttle(limit_run => 2, cb => sub { $autodrop_flag++ });
-$dropped->DESTROY;
+
+# 9 start twice (nothing)
+my $t9_count;
+my $t9 = $CLASS->new(limit_period => 1, cb => sub { $t9_count++ });
+$t9->run();
+$t9->period(0.1 * $SCALE);
+$t9->run();
 
 
+# 10 stop,start with saving period timers
+my $t10_count;
+my $t10 = $CLASS->new(
+  limit_period => 2,
+  period       => 0.3 * $SCALE,
+  cb           => sub { $t10_count++ }
+);
+$t10->ioloop->timer(0.01 * $SCALE => sub { $t10->run() });
+$t10->ioloop->timer(0.1 * $SCALE  => sub { $t10->stop() });
+$t10->ioloop->timer(0.2 * $SCALE  => sub { $t10->run() });
+$t10->ioloop->timer(0.5 * $SCALE  => sub { $t10->drop });
 
+
+# 11
+my $t11_count;
+my $t11 = $CLASS->new(cb => sub { $t11_count++ });
+$t11->begin;
+$t11->begin(2);
 
 diag
   "Starting loop for a $SCALE seconds (depends on your perfomance).\nPlease, wait...";
@@ -154,22 +158,46 @@ $ioloop->start;
 # --------------------------- start ------------------------------------
 # Now let's see wtf (actually, the most of our tests starts right now)?
 
+# 1
 is $t_destroy_flag, undef, 'DESTROY stops timers by default!';
-is $t_stop_flag,    1,     'stop method works great!';
-is $lp_count, 3, "Ok, period ${\(0.3 * $SCALE)} have a time to refresh 3 times in $SCALE second";
+
+# 2
+is $t_stop_flag, 1, 'stop method works great!';
+
+# 3
+is $lp_count, 2,
+  "Ok, period 0.3 * $SCALE have a time to refresh 3 times in 0.8 * $SCALE second";
+
+#4
 is $lp_flag, ($lp_count + 1) * 2,
   'Ok, we have increased the flag for 8 times with limit_period => 2 and period => 0.3s';
-is $lr_flag, (int(1 / 0.3) + 1) * 4, "limit_run works!";
+
+is $lr_flag, (int(0.5 / 0.2) + 1) * 3, "limit_run works!";
+
+# 5
 ok $drain_flag > 1,
-    "Drain event: "
+	"Drain event: "
   . int($drain_flag / $SCALE)
   . "/s; This is your IOWatcher's \"drain\" event perfomance. Set MOJO_IOWATCHER enviropment to change default one. (Mojo::IOWather::EV is much faster than Mojo::IOWather)";
-is $drain_flag2,  undef, 'Ok, drain works with ->end(s) only';
-is $running_flag, undef, 'Without cb\'s subscribers throttle drops itself';
-is $finish_count, 2,     "limit works!";
-is $finish_flag,  1,     "Finish event emitted successfully";
+
+# 6
+is $drain_flag2, undef, 'Ok, drain works with ->end(s) only';
+
+
+# 7
+is $finish_count, 2, "limit works!";
+is $finish_flag,  1, "Finish event emitted successfully";
+
+# 8
 is $nfinish_flag, undef, 'No finish event without ->end(s)';
-is $autodrop_flag, 2, 'Ok, autodrop works';
+
+# 9
+is $t9_count, 1, 'ok, run on running throttle do nothing';
+
+# 10
+is $t10_count, 4, 'ok. Stop/start works and save period';
+
+is $t11_count, 3, 'Ok, begin method works';
 
 # ---------------------------- end ----------------------------------------
 
@@ -182,17 +210,4 @@ my $t_wait = $CLASS->new();
 $ioloop->timer(0.01 * $SCALE => sub { $wait_flag1++; });
 $ioloop->timer(0.15 * $SCALE + 0.1 => sub { $wait_flag2++; $_[0]->stop; });
 
-# Тут throttle наш луп хуюп
-$t_wait->throttle(
-  limit => 1,
-  delay => 0.05 * $SCALE,
-  cb    => sub { $_[0]->end; }
-);
-$t_wait->wait;
 
-is $wait_flag1, 1,     "wait method does not drops ioloop timers";
-is $wait_flag2, undef, "and stop loop succesfully";
-
-# Но все таки таймер в 1 * $SCALE секунд остался, и должен сработать щас
-$ioloop->start();
-is $wait_flag2, 1, 'ok, our other timers are alive';

@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 use Mojo::Base -strict;
-use MojoX::IOLoop::Throttle;
+use MojoX::IOLoop::Throttle 0.0111;
 
 =head1 Description
 
@@ -17,7 +17,7 @@ in parallels with some limitations.
   вызывает событие 'finish'
 
 
-Cмотрите строки 81-93, остальное можно пропустить
+Cмотрите строки 67-94, остальное можно пропустить
 
 =cut
 
@@ -62,7 +62,17 @@ my $cb = sub {
 
 
 # Throttle
-my $throttle = MojoX::IOLoop::Throttle->new();
+
+
+my $throttle = MojoX::IOLoop::Throttle->new(
+  limit_run => 2,               # But allow not more than [limit_run] running (parallel,incomplete) jobs
+
+  period       => 2,            # seconds
+  limit_period => 4,            # do not start more then [limit_period] jobs per [period] seconds
+
+  #delay => 0.1,                # simulate (or not) a little latency between shots (timer resolution)
+  cb => $cb,                    # play this callback
+);
 
 my $cb_text =          "[info] I am a job. I have increased our running count (for run_limit).";
 my $drain_once_text =  "\nOoops! limit_period is exhausted. Waiting for the next period";
@@ -76,18 +86,8 @@ $throttle->on(drain   => sub { print "." });
 $throttle->on(period  => sub { say $period_text });
 $throttle->once(drain => sub { $drain_once_text });
 
-
-# Throttle!
-$throttle->throttle(
-  limit => scalar @domains,     # Play [limit] jobs(callbacks)
-  limit_run => 2,               # But allow not more than [limit_run] running (parallel,incomplete) jobs
-
-  period       => 2,            # seconds
-  limit_period => 4,            # do not start more then [limit_period] jobs per [period] seconds
-
-  #delay => 0.1,                # simulate (or not) a little latency between shots (timer resolution)
-  cb => $cb,                    # play this callback
-);
+# Play n jobs (run throttle for n times)
+$throttle->begin(scalar @domains);
 
 # Let's start
 $throttle->wait;

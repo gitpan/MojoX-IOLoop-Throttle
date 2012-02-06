@@ -1,7 +1,7 @@
 package MojoX::IOLoop::Throttle;
 use Mojo::Base 'Mojo::EventEmitter';
 
-our $VERSION = '0.01_08';
+our $VERSION = '0.01_11';
 $VERSION = eval $VERSION;
 
 
@@ -12,86 +12,85 @@ my $DEBUG = $ENV{MOJO_THROTTLE_DEBUG};
 
 has ioloop => sub { Mojo::IOLoop->singleton };
 
-# drop timers on undef $throttle
-has autodrop => 1;
+has [qw/is_running is_running/];
+
+has [qw/ period limit_period limit_run limit/] => 0;
+
+has delay => '0.0001';
+
+has 'cb';
 
 
-sub throttle {
+sub run {
   my ($self, %args) = @_;
 
-  my $limit_period = $args{limit_period} || 0;
-  my $limit_run    = $args{limit_run}    || 0;
-  my $limit_total  = $args{limit}        || 0;
-  
-  # Это необходимо для end, запускать финиш или нет
-  $self->{limit_total} = $limit_total;
+  # Инициализируем стандартными значениями
+  $self->period;
+  $self->limit_period;
+  $self->limit_run;
+  $self->limit;
 
-  my $delay  = exists $args{delay} ? $args{delay} : '0.0001';
-  my $period = $args{period};
-
-
-  # subscribe call back
-  $self->on(cb => $args{cb}) if $args{cb};
 
   # Check if we are already running
-  croak 'This throttle is already running' if $self->{is_running}++;
+  return if $self->{is_running}++;
   warn "Starting new $self\n" if $DEBUG;
+  
 
   # defaults
-  my $ioloop       = $self->ioloop;
-  my $period_count = 0;
-  $self->{running_count} = 0;
-  $self->{count_total}   = 0;
+  my $ioloop = $self->ioloop;
+  $self->{count_period} ||= 0;
+  $self->{count_run}    ||= 0;
+  $self->{count_total}  ||= 0;
 
-  if ($period) {
-    $self->{period_timer_id} =
-      $ioloop->recurring(
-      $period => sub { $period_count = 0; $self->emit('period'); });
+  if ($self->{period} and !$self->{period_timer_id}) {
+	$self->{period_timer_id} =
+	  $ioloop->recurring($self->{period} =>
+		sub { $self->{count_period} = 0; $self->emit('period'); });
   }
 
   $self->{cb_timer_id} = $ioloop->recurring(
-    $delay => sub {
-      
-      # Если никто не подписан, нам делать нечего
-      unless ($self->has_subscribers('cb')) {
-        warn "No subscribers. Maybe error? $self\n" if $DEBUG;
-        $self->drop;
-        return;
-      }
-      
-      unless (!$limit_total || $self->{count_total} < $limit_total) {
-        warn "The limit $limit_total is exhausted\n" if $DEBUG;
-        $self->drop;
-        return;
-      }
+	$self->{delay} => sub {
 
-      # Проверяем душить или нет. Нужно чтобы был задан хотя бы один из параметров limit or limit_run, без этого будет drain
-      my $cond = (
-        # Не вышли за пределы лимита или лимит не задан, но задан хотя бы limit_run
-        ($period_count < $limit_period || (!$limit_period))
 
-        # Не вышли за пределы работающих параллельно задач или если такого лимита нет, то задан хотя бы limit
-          && (($self->{running_count} < $limit_run)
-          || (!$limit_run))
-      );
+	  unless (!$self->{limit} || $self->{count_total} < $self->{limit}) {
+		warn "The limit $self->{limit} is exhausted. Emitting drain\n" if $DEBUG;
+		$self->emit('drain');
+		#$self->drop;
+		return;
+	  }
 
-      if ($cond) {
-        $period_count++;
-        $self->{running_count}++;
-        $self->{count_total}++;
-        $self->emit('cb');
-        return;
-        
-      }
-      # Если вышли за пределы лимита в периоде и нет запущенных коллбэков
-      elsif (!$self->{running_count}) {
-        $self->emit('drain');
-        return;
-      }
+	  # Проверяем душить или нет. Нужно чтобы был задан хотя бы один из параметров limit or limit_run, без этого будет drain
+	  my $cond = (
 
-      # Если здесь, значит у нас лимиты
-      return;
-    }
+		# Не вышли за пределы лимита или лимит не задан, но задан хотя бы limit_run
+		( $self->{count_period} < $self->{limit_period}
+			|| (!$self->{limit_period})
+		)
+
+		# Не вышли за пределы работающих параллельно задач или если такого лимита нет, то задан хотя бы limit
+		  && (($self->{count_run} < $self->{limit_run})
+		  || (!$self->{limit_run}))
+	  );
+
+	  if ($cond) {
+		$self->{count_period}++;
+		$self->{count_run}++;
+		$self->{count_total}++;
+		$self->cb->($self) if $self->cb;
+		$self->emit('cb');
+		return;
+
+	  }
+
+	  # Если вышли за пределы лимита в периоде и нет запущенных коллбэков
+	  elsif (!$self->{count_run}) {
+		$self->emit('drain');
+		return;
+	  }
+
+	  # Если здесь, значит у нас лимиты
+	  return;
+	}
   );
   return $self;
 
@@ -99,12 +98,15 @@ sub throttle {
 
 sub end {
   my ($self) = @_;
-  $self->{running_count}--;
-  
+  $self->{count_run}--;
+
   # Если исчерпан лимит
-  if ( (!$self->{running_count}) and $self->{limit_total} and $self->{count_total} >= $self->{limit_total}) {  
-    $self->emit('finish');
-    warn "finish event\n" if $DEBUG;
+  if (  (!$self->{count_run})
+	and $self->{limit}
+	and $self->{count_total} >= $self->{limit})
+  {
+	$self->emit('finish');
+	warn "finish event\n" if $DEBUG;
   }
   return;
 }
@@ -113,41 +115,91 @@ sub end {
 sub DESTROY {
   my ($self) = @_;
   warn "Destroing $self\n" if $DEBUG;
-  
-  $self->drop() if $self->autodrop;
+
+  $self->drop();
   $self->SUPER::DESTROY() if SUPER->can('DESTROY');
   return;
 }
 
+# Сразу останавливает и все обнуляет
 sub drop {
   my ($self) = @_;
 
   warn "Dropping $self ...\n" if $DEBUG;
 
-  delete $self->{is_running};
+  # Clear my timers
+  if (my $loop = $self->ioloop) {
+	warn "Dropping timers\n"              if $DEBUG;
+	$loop->drop($self->{cb_timer_id})     if $self->{cb_timer_id};
+	$loop->drop($self->{period_timer_id}) if $self->{period_timer_id};
+  }
+
+  #delete $self->{is_running};
+  foreach (keys %$self) {
+	delete $self->{$_};
+  }
+
+  return $self;
+}
+
+# Останавливает на время (не обнуляя limit_period)
+# Запускаем таймер, который все таки limit_period обновит
+sub stop {
+  my ($self) = @_;
+
+  warn "Stopping $self ...\n" if $DEBUG;
 
   # Clear my timers
   if (my $loop = $self->ioloop) {
-    warn "Dropping timers\n"              if $DEBUG;
-    $loop->drop($self->{cb_timer_id})     if $self->{cb_timer_id};
-    $loop->drop($self->{period_timer_id}) if $self->{period_timer_id};
+	warn "Dropping cb timer\n" if $DEBUG;
+	$loop->drop($self->{cb_timer_id}) if $self->{cb_timer_id};
+	delete $self->{cb_timer_id};
+	
+	#Сохраняем обнуление периода и дропаемся, чтобы старт не запустило
+	if($self->{period_timer_id}) {
+	  $self->once(
+		period => sub {
+		  unless ($self->is_running) {
+			warn "Drop period timer\n" if $DEBUG;
+			$loop->drop($self->{period_timer_id});
+			delete $self->{period_timer_id};
+		  }
+		  else {
+			warn "$self is running again. Not drop period timer\n" if $DEBUG;
+		  }
+		  
+	  }
+	);
+	}
+	
   }
   delete $self->{is_running};
   return $self;
+}
+
+# Увеличивает общий лимит на 1 или $count раз, если $count указан в качестве второго аргумента
+# запускает (если еще не запущен, пытается в общем) сделать $self->run
+sub begin {
+  my ($self, $count) = @_;
+  $count||=1;
+  $self->{limit}+=$count;
+  $self->run;
+  return;
 }
 
 sub wait {
   my $self = shift;
 
   $self->once(
-    finish => sub {
-      my ($thr) = @_;
-      $thr->drop if $thr->{is_running};
-      $thr->ioloop->stop;
-    }
+	finish => sub {
+	  my ($thr) = @_;
+	  $thr->drop if $thr->{is_running};
+	  $thr->ioloop->stop;
+	}
   );
   $self->ioloop->start;
   return;
+
   #return wantarray ? @{$self->{args}} : $self->{args}->[0];
 }
 
@@ -160,49 +212,55 @@ MojoX::IOLoop::Throttle - throttle Mojo events
 
 =head1 VERSION
 
-Version 0.01_08. (DEV)
+Version 0.01_11. (DEV)
 
 =cut
 
 
 =head1 SYNOPSIS
 
-    use Mojo::Base -strict;
-    use  MojoX::IOLoop::Throttle;
-    $|=1;
-    
-    # New throttle object
-    my $throttle = MojoX::IOLoop::Throttle->new();    
-    
-    # Subscribe to finish event
-    $throttle->on(finish => sub { say "All done! Bye-bye"; });
-    
-    # Throttle!
-    $throttle->throttle(
-      limit => 20,                  # Play [limit] jobs(callbacks)
-      limit_run => 3,               # But allow not more than [limit_run] running (parallel,incomplete) jobs
-    
-      period       => 2,            # seconds
-      limit_period => 4,            # do not start more than [limit_period] jobs per [period] seconds 
-    
-      delay => 0.05,                # simulate (or not) a little latency between shots (timer resolution)
-      cb => sub {
-        my ($thr) = @_;
-        my $rand_time = rand() / 5;
-        say "Job $rand_time started";
-        $thr->ioloop->timer($rand_time => sub {          
-          say "job $rand_time ended";
-          
-          # Say that we end (to decrease limit_run count and let other job to start)
-          $thr->end();
-          });
+  use Mojo::Base -strict;
+  use MojoX::IOLoop::Throttle;
+  $| = 1;
+  
+  # New throttle object
+  my $throttle = MojoX::IOLoop::Throttle->new(  
+    limit_run =>    3,    # Allow not more than [limit_run] running (parallel,incomplete) jobs
+  
+    period =>       2,    # seconds
+    limit_period => 4,    # do not start more than [limit_period] jobs per [period] seconds
+  
+    delay =>        0.05  # Simulate a little latency
+  );
+  
+  my $count;
+  
+  # CallBack to throttle
+  $throttle->cb(sub {
+    my ($thr) = @_;
+    my $rand_time = rand() / 5;
+    say "Job $rand_time started";
+    $thr->ioloop->timer(
+      $rand_time => sub {
+        say "job $rand_time ended";
+        $count++;
+        # Say that we end (to decrease limit_run count and let other job to start)
+        $thr->end();
       }
     );
-    
-    # Let's start
-    $throttle->wait unless $throttle->ioloop->is_running;
-    
-    exit 0;;
+  });
+  
+  # Subscribe to finish event
+  $throttle->on(finish => sub { say "I've processed $count jobs! Bye-bye"; });
+  
+  # Throttle 20 jobs!
+  $throttle->begin(20);
+  
+  # Let's start
+  $throttle->wait unless $throttle->ioloop->is_running;
+  
+  exit 0;
+
 
 
 =head1 DESCRIPTION
@@ -226,14 +284,21 @@ in progress
 
 in progress
 
-=head2 C<throttle>
-
-in progress
-
 =head2 C<drop>
 
 in progress
 
+=head2 C<begin>
+
+in progress
+
+=head2 C<run>
+
+in progress
+
+=head2 C<stop>
+
+in progress
 
   
 
@@ -254,7 +319,7 @@ automatically be notified of progress on your bug as I make changes.
 
 You can find documentation for this module with the perldoc command.
 
-    perldoc MojoX::IOLoop::Throttle
+	perldoc MojoX::IOLoop::Throttle
 
 
 You can also look for information at:
