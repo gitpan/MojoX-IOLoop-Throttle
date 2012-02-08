@@ -210,4 +210,14 @@ my $t_wait = $CLASS->new();
 $ioloop->timer(0.01 * $SCALE => sub { $wait_flag1++; });
 $ioloop->timer(0.15 * $SCALE + 0.1 => sub { $wait_flag2++; $_[0]->stop; });
 
+# wait должно вызвать on finish
+my $thr = $CLASS->new(limit => 1);
+my ($t12_finish, $t12_break);
+$thr->cb(sub { $thr->end;});
+$thr->on(finish => sub {$t12_finish++; });
+
+$thr->ioloop->timer(0.1 * $SCALE => sub {$thr->ioloop->stop; $t12_break++});
+$thr->wait;
+is $t12_break, undef, 'Wait stops';
+is $t12_finish, 1, "Ok. Finish event emitted. Wait make run";
 

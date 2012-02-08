@@ -1,7 +1,7 @@
 package MojoX::IOLoop::Throttle;
 use Mojo::Base 'Mojo::EventEmitter';
 
-our $VERSION = '0.01_11';
+our $VERSION = '0.01_12';
 $VERSION = eval $VERSION;
 
 
@@ -12,7 +12,7 @@ my $DEBUG = $ENV{MOJO_THROTTLE_DEBUG};
 
 has ioloop => sub { Mojo::IOLoop->singleton };
 
-has [qw/is_running is_running/];
+has [qw/is_running /];
 
 has [qw/ period limit_period limit_run limit/] => 0;
 
@@ -34,7 +34,7 @@ sub run {
   # Check if we are already running
   return if $self->{is_running}++;
   warn "Starting new $self\n" if $DEBUG;
-  
+
 
   # defaults
   my $ioloop = $self->ioloop;
@@ -43,54 +43,56 @@ sub run {
   $self->{count_total}  ||= 0;
 
   if ($self->{period} and !$self->{period_timer_id}) {
-	$self->{period_timer_id} =
-	  $ioloop->recurring($self->{period} =>
-		sub { $self->{count_period} = 0; $self->emit('period'); });
+    $self->{period_timer_id} =
+      $ioloop->recurring($self->{period} =>
+        sub { $self->{count_period} = 0; $self->emit('period'); });
   }
 
   $self->{cb_timer_id} = $ioloop->recurring(
-	$self->{delay} => sub {
+    $self->{delay} => sub {
 
 
-	  unless (!$self->{limit} || $self->{count_total} < $self->{limit}) {
-		warn "The limit $self->{limit} is exhausted. Emitting drain\n" if $DEBUG;
-		$self->emit('drain');
-		#$self->drop;
-		return;
-	  }
+      unless (!$self->{limit} || $self->{count_total} < $self->{limit}) {
+        warn "The limit $self->{limit} is exhausted. Emitting drain\n"
+          if $DEBUG;
+        $self->emit('drain');
 
-	  # Проверяем душить или нет. Нужно чтобы был задан хотя бы один из параметров limit or limit_run, без этого будет drain
-	  my $cond = (
+        #$self->drop;
+        return;
+      }
 
-		# Не вышли за пределы лимита или лимит не задан, но задан хотя бы limit_run
-		( $self->{count_period} < $self->{limit_period}
-			|| (!$self->{limit_period})
-		)
+      # Проверяем душить или нет. Нужно чтобы был задан хотя бы один из параметров limit or limit_run, без этого будет drain
+      my $cond = (
 
-		# Не вышли за пределы работающих параллельно задач или если такого лимита нет, то задан хотя бы limit
-		  && (($self->{count_run} < $self->{limit_run})
-		  || (!$self->{limit_run}))
-	  );
+        # Не вышли за пределы лимита или лимит не задан, но задан хотя бы limit_run
+        ( $self->{count_period} < $self->{limit_period}
+            || (!$self->{limit_period})
+        )
 
-	  if ($cond) {
-		$self->{count_period}++;
-		$self->{count_run}++;
-		$self->{count_total}++;
-		$self->cb->($self) if $self->cb;
-		$self->emit('cb');
-		return;
+        # Не вышли за пределы работающих параллельно задач или если такого лимита нет, то задан хотя бы limit
+          && (($self->{count_run} < $self->{limit_run})
+          || (!$self->{limit_run}))
+      );
 
-	  }
+      if ($cond) {
+        $self->{count_period}++;
+        $self->{count_run}++;
+        $self->{count_total}++;
+        $self->cb->($self) if $self->cb;
+        $self->emit('cb');
+        return;
 
-	  # Если вышли за пределы лимита в периоде и нет запущенных коллбэков
-	  elsif (!$self->{count_run}) {
-		$self->emit('drain');
-		return;
-	  }
+      }
 
-	  # Если здесь, значит у нас лимиты
-	  return;
-	}
+      # Если вышли за пределы лимита в периоде и нет запущенных коллбэков
+      elsif (!$self->{count_run}) {
+        $self->emit('drain');
+        return;
+      }
+
+      # Если здесь, значит у нас лимиты
+      return;
+    }
   );
   return $self;
 
@@ -99,14 +101,18 @@ sub run {
 sub end {
   my ($self) = @_;
   $self->{count_run}--;
-
+  
+  # Вызвали end не оттуда и произошел рассинхрон, что критично
+  if ($DEBUG) { warn "Not running but ended" unless $self->is_running };
+  return unless $self->is_running;
+  
   # Если исчерпан лимит
   if (  (!$self->{count_run})
-	and $self->{limit}
-	and $self->{count_total} >= $self->{limit})
+    and $self->{limit}
+    and $self->{count_total} >= $self->{limit})
   {
-	$self->emit('finish');
-	warn "finish event\n" if $DEBUG;
+    $self->emit('finish');
+    warn "finish event\n" if $DEBUG;
   }
   return;
 }
@@ -129,14 +135,13 @@ sub drop {
 
   # Clear my timers
   if (my $loop = $self->ioloop) {
-	warn "Dropping timers\n"              if $DEBUG;
-	$loop->drop($self->{cb_timer_id})     if $self->{cb_timer_id};
-	$loop->drop($self->{period_timer_id}) if $self->{period_timer_id};
+    warn "Dropping timers\n"              if $DEBUG;
+    $loop->drop($self->{cb_timer_id})     if $self->{cb_timer_id};
+    $loop->drop($self->{period_timer_id}) if $self->{period_timer_id};
   }
 
-  #delete $self->{is_running};
   foreach (keys %$self) {
-	delete $self->{$_};
+    delete $self->{$_};
   }
 
   return $self;
@@ -151,27 +156,27 @@ sub stop {
 
   # Clear my timers
   if (my $loop = $self->ioloop) {
-	warn "Dropping cb timer\n" if $DEBUG;
-	$loop->drop($self->{cb_timer_id}) if $self->{cb_timer_id};
-	delete $self->{cb_timer_id};
-	
-	#Сохраняем обнуление периода и дропаемся, чтобы старт не запустило
-	if($self->{period_timer_id}) {
-	  $self->once(
-		period => sub {
-		  unless ($self->is_running) {
-			warn "Drop period timer\n" if $DEBUG;
-			$loop->drop($self->{period_timer_id});
-			delete $self->{period_timer_id};
-		  }
-		  else {
-			warn "$self is running again. Not drop period timer\n" if $DEBUG;
-		  }
-		  
-	  }
-	);
-	}
-	
+    warn "Dropping cb timer\n" if $DEBUG;
+    $loop->drop($self->{cb_timer_id}) if $self->{cb_timer_id};
+    delete $self->{cb_timer_id};
+
+    #Сохраняем обнуление периода и дропаемся, чтобы старт не запустило
+    if ($self->{period_timer_id}) {
+      $self->once(
+        period => sub {
+          unless ($self->is_running) {
+            warn "Drop period timer\n" if $DEBUG;
+            $loop->drop($self->{period_timer_id});
+            delete $self->{period_timer_id};
+          }
+          else {
+            warn "$self is running again. Not drop period timer\n" if $DEBUG;
+          }
+
+        }
+      );
+    }
+
   }
   delete $self->{is_running};
   return $self;
@@ -181,8 +186,8 @@ sub stop {
 # запускает (если еще не запущен, пытается в общем) сделать $self->run
 sub begin {
   my ($self, $count) = @_;
-  $count||=1;
-  $self->{limit}+=$count;
+  $count ||= 1;
+  $self->{limit} += $count;
   $self->run;
   return;
 }
@@ -191,13 +196,14 @@ sub wait {
   my $self = shift;
 
   $self->once(
-	finish => sub {
-	  my ($thr) = @_;
-	  $thr->drop if $thr->{is_running};
-	  $thr->ioloop->stop;
-	}
+    finish => sub {
+      my ($thr) = @_;
+      $thr->drop if $thr->{is_running};
+      $thr->ioloop->stop;
+    }
   );
-  $self->ioloop->start;
+  $self->run;
+  $self->ioloop->start;  
   return;
 
   #return wantarray ? @{$self->{args}} : $self->{args}->[0];
@@ -212,7 +218,7 @@ MojoX::IOLoop::Throttle - throttle Mojo events
 
 =head1 VERSION
 
-Version 0.01_11. (DEV)
+Version 0.01_12. (DEV)
 
 =cut
 
@@ -319,7 +325,7 @@ automatically be notified of progress on your bug as I make changes.
 
 You can find documentation for this module with the perldoc command.
 
-	perldoc MojoX::IOLoop::Throttle
+    perldoc MojoX::IOLoop::Throttle
 
 
 You can also look for information at:
