@@ -22,19 +22,19 @@ my $SCALE;
 SCALE: {
   unless ($SCALE = $ENV{THROTTLE_SCALE}) {
 
-	# Определяем производительность, необходимую чтобы выполнить тесты побыстрее
-	my $count;
-	my $id = $ioloop->recurring(0.001 => sub { $count++ });
-	$ioloop->timer(0.2 => sub { $ioloop->drop($id); $ioloop->stop(); });
-	$ioloop->start();
-	$SCALE = int(30 / $count * 10) / 10;
+    # Определяем производительность, необходимую чтобы выполнить тесты побыстрее
+    my $count;
+    my $id = $ioloop->recurring(0.001 => sub { $count++ });
+    $ioloop->timer(0.2 => sub { $ioloop->drop($id); $ioloop->stop(); });
+    $ioloop->start();
+    $SCALE = int(30 / $count * 10) / 10;
 
-	# For fast computers
-	$SCALE = 0.4 if $SCALE < 0.4;
+    # For fast computers
+    $SCALE = 0.4 if $SCALE < 0.4;
 
-	diag "Your ${\ref( $ioloop->iowatcher)} perfomance is $count/0.2 sec. "
-	  . "We will start the loop for test for $SCALE seconds\n. "
-	  . "You can pass a new value to the THROTTLE_SCALE enviropment variable";
+    diag "Your ${\ref( $ioloop->iowatcher)} perfomance is $count/0.2 sec. "
+      . "We will start the loop for test for $SCALE seconds\n. "
+      . "You can pass a new value to the THROTTLE_SCALE enviropment variable";
   }
 }
 
@@ -42,20 +42,22 @@ SCALE: {
 # Все эти тесты будут выполнены одновременно за 1*$SCALE секунд (параллельно),
 # а результат потом сравним. Иначе мы б охренели ждать и расфигарили что-нить ценное
 
-# DESTROING, autodrop is true by defaults
+# DESTROING
 my $t_destroy_flag;
 my $t_destroy = $CLASS->new();
 
-$t_destroy->on(cb => sub { $t_destroy_flag = 'fuck' });
+$t_destroy->on(cb => sub { $t_destroy_flag = 'fuck'; });
 $t_destroy->run();
-$t_destroy->DESTROY();
 
-# 2 Stopping
-my $t_stop_flag;
-my $t_stop = $CLASS->new();
+# call $t_destroy->DESTROY();
+undef $t_destroy;
 
-$t_stop->on(cb => sub { $t_stop_flag++; shift->drop() });
-$t_stop->run();
+# 2 Dropping
+my $t_drop_flag;
+my $t_drop = $CLASS->new();
+
+$t_drop->on(cb => sub { $t_drop_flag++; shift->drop() });
+$t_drop->run();
 
 # 3 'limit_period', 'period' event and 'cb' arg in one test! all or nothing
 my $lp_flag;
@@ -63,34 +65,27 @@ my $lp_count;
 my $t_lp = $CLASS->new(
   limit_period => 2,
   period       => 0.3 * $SCALE,
-  cb           => sub { $lp_flag++ }
 );
 $t_lp->ioloop->timer(0.8 * $SCALE => sub { $t_lp->drop });
-$t_lp->run();
+$t_lp->run(sub { $lp_flag++ });
 $t_lp->on(period => sub { $lp_count++ });
 
 
 # 4 limit_run and 'end' event
 my $lr_flag;
-my $lr = $CLASS->new(
-  limit_run => 3,
-  cb        => sub {
-	my ($thr) = @_;
-	$lr_flag++;
-	$thr->ioloop->timer(0.2 * $SCALE => sub { $thr->end; });
+my $lr = $CLASS->new(limit_run => 3);
+$lr->ioloop->timer(0.5 * $SCALE => sub { $lr->drop });
+$lr->run(
+  sub {
+    my ($thr) = @_;
+    $lr_flag++;
+    $thr->ioloop->timer(0.2 * $SCALE => sub { $thr->end; });
   }
 );
-$lr->ioloop->timer(0.5 * $SCALE => sub {$lr->drop} );
-$lr->run();
 
 # 5 drain event
 my $drain_flag;
-my $t_drain = $CLASS->new(
-  limit_period => 1,
-  cb           => sub { shift->end }
-  )->run(
-
-  );
+my $t_drain = $CLASS->new(limit_period => 1)->run(sub { shift->end });
 $t_drain->on(drain => sub { $drain_flag++ });
 
 
@@ -101,18 +96,17 @@ $t_drain2->on(drain => sub { $drain_flag2++ });
 
 # 7 finish event
 my ($finish_count, $finish_flag);
-my $t_finish = $CLASS->new(
-  limit => 2,
-  cb    => sub {
-	my ($t) = @_;
-	$t->ioloop->timer(
-	  0.1 * $SCALE => sub {
-		$finish_count++;
-		$t->end();
-	  }
-	);
+my $t_finish = $CLASS->new(limit => 2)->run(
+  sub {
+    my ($t) = @_;
+    $t->ioloop->timer(
+      0.1 * $SCALE => sub {
+        $finish_count++;
+        $t->end();
+      }
+    );
   }
-)->run();
+);
 $t_finish->on(finish => sub { $finish_flag++ });
 
 # 8 no finish without ->end
@@ -121,32 +115,74 @@ my $t_nfinish = $CLASS->new(cb => sub {;})->run();
 $t_nfinish->on(finish => sub { $nfinish_flag++ });
 
 
-# 9 start twice (nothing)
-my $t9_count;
-my $t9 = $CLASS->new(limit_period => 1, cb => sub { $t9_count++ });
-$t9->run();
+# 9 start twice (nothing with carp)
+my ($t9_count, $t9_carp);
+my $t9 = $CLASS->new(limit_period => 1);
+$t9->run(sub { $t9_count++ });
 $t9->period(0.1 * $SCALE);
-$t9->run();
+CARP: {
+  local $SIG{__WARN__} = sub {
+    $t9_carp = shift;
+  };
+  $t9->run(sub {;});
+}
 
-
-# 10 stop,start with saving period timers
-my $t10_count;
-my $t10 = $CLASS->new(
-  limit_period => 2,
-  period       => 0.3 * $SCALE,
-  cb           => sub { $t10_count++ }
+# 12 autostop
+# stops timers on limit (but do not drop object because we need on finish event)
+# no on drain, on cb or on_period here, autostop = 1 by default
+my ($t12, $t12_dr_flag, $t12_cb_flag, $t12_pe_flag);
+$t12 = $CLASS->new(limit => 1, period => 0.1 * $SCALE);
+$t12->run(
+  sub {
+    my $self = shift;
+    $self->on(drain  => sub { $t12_dr_flag++ });
+    $self->on(period => sub { $t12_pe_flag++ });
+    $self->on(cb     => sub { $t12_cb_flag++ });
+    $self->end;
+  }
 );
-$t10->ioloop->timer(0.01 * $SCALE => sub { $t10->run() });
-$t10->ioloop->timer(0.1 * $SCALE  => sub { $t10->stop() });
-$t10->ioloop->timer(0.2 * $SCALE  => sub { $t10->run() });
-$t10->ioloop->timer(0.5 * $SCALE  => sub { $t10->drop });
+
+# autostop = 0, all events except cb are emitted
+my ($t12_2, $t12_dr_flag_2, $t12_cb_flag_2, $t12_pe_flag_2);
+$t12_2 = $CLASS->new(limit => 1, period => 0.1 * $SCALE);
+$t12_2->autostop(0);
+$t12_2->run(
+  sub {
+    my $self = shift;
+    $self->on(drain  => sub { $t12_dr_flag_2++ });
+    $self->on(period => sub { $t12_pe_flag_2++ });
+    $self->on(cb     => sub { $t12_cb_flag_2++ });
+    $self->end;
+  }
+);
+
+# 13
+# add limit after stopping end resume
+# вызовется событие on finish, остановит, но подписчики никуда не денутся
+my ($t13, $t13_flag);
+$t13 = $CLASS->new(limit => 1);
+
+$t13->autostop(0);
+$t13->run(sub { $t13_flag++; });
+$t13->on(cb => sub { shift->end });
 
 
-# 11
-my $t11_count;
-my $t11 = $CLASS->new(cb => sub { $t11_count++ });
-$t11->begin;
-$t11->begin(2);
+# Пробуем повторить попытку, добавив лимит 2, потом добавим лимит 1.
+# это должно разморозить нас так как autostop не включен
+$ioloop->timer(
+  0.2 * $SCALE => sub {
+    $t13->add_limit(2) if $t13->is_running;
+  }
+);
+
+$ioloop->timer(
+  0.5 * $SCALE => sub {
+    # А это добавит 1 по умолчанию
+    $t13->add_limit if $t13->is_running;
+  }
+);
+
+
 
 diag
   "Starting loop for a $SCALE seconds (depends on your perfomance).\nPlease, wait...";
@@ -162,21 +198,21 @@ $ioloop->start;
 is $t_destroy_flag, undef, 'DESTROY stops timers by default!';
 
 # 2
-is $t_stop_flag, 1, 'stop method works great!';
+is $t_drop_flag, 1, 'stop method works great!';
 
 # 3
 is $lp_count, 2,
   "Ok, period 0.3 * $SCALE have a time to refresh 3 times in 0.8 * $SCALE second";
 
-#4
 is $lp_flag, ($lp_count + 1) * 2,
   'Ok, we have increased the flag for 8 times with limit_period => 2 and period => 0.3s';
 
+# 4
 is $lr_flag, (int(0.5 / 0.2) + 1) * 3, "limit_run works!";
 
 # 5
 ok $drain_flag > 1,
-	"Drain event: "
+    "Drain event: "
   . int($drain_flag / $SCALE)
   . "/s; This is your IOWatcher's \"drain\" event perfomance. Set MOJO_IOWATCHER enviropment to change default one. (Mojo::IOWather::EV is much faster than Mojo::IOWather)";
 
@@ -191,33 +227,20 @@ is $finish_flag,  1, "Finish event emitted successfully";
 # 8
 is $nfinish_flag, undef, 'No finish event without ->end(s)';
 
+
 # 9
 is $t9_count, 1, 'ok, run on running throttle do nothing';
+like $t9_carp, qr/already running/i,
+  'Ok, run on running throttle call carp and change nothing';
 
-# 10
-is $t10_count, 4, 'ok. Stop/start works and save period';
 
-is $t11_count, 3, 'Ok, begin method works';
+is $t12_dr_flag || $t12_cb_flag || $t12_pe_flag, undef,
+  "autostop stop all timers. no events emitted after limit exhausted";
+is $t12->is_running, undef;
 
-# ---------------------------- end ----------------------------------------
+ok $t12_dr_flag_2 && $t12_pe_flag_2 && !$t12_cb_flag_2,
+  "if autostop = false, period and drain event still runs after limit is exhausted";
 
-# И на последочек смотрим как ведет себя дракоша в общем, не мешает ли другим таймерам
-# wait method it global ioloop loop
-my ($wait_flag1, $wait_flag2);
-my $t_wait = $CLASS->new();
+is $t13_flag, 4, "add_limit works as expected with autodrop = 0";
 
-# Первое сработает, а второе не должно успеть
-$ioloop->timer(0.01 * $SCALE => sub { $wait_flag1++; });
-$ioloop->timer(0.15 * $SCALE + 0.1 => sub { $wait_flag2++; $_[0]->stop; });
-
-# wait должно вызвать on finish
-my $thr = $CLASS->new(limit => 1);
-my ($t12_finish, $t12_break);
-$thr->cb(sub { $thr->end;});
-$thr->on(finish => sub {$t12_finish++; });
-
-$thr->ioloop->timer(0.1 * $SCALE => sub {$thr->ioloop->stop; $t12_break++});
-$thr->wait;
-is $t12_break, undef, 'Wait stops';
-is $t12_finish, 1, "Ok. Finish event emitted. Wait make run";
 

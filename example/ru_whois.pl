@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 use Mojo::Base -strict;
-use MojoX::IOLoop::Throttle 0.0111;
+use MojoX::IOLoop::Throttle 0.0117;
 
 =head1 Description
 
@@ -71,26 +71,26 @@ my $throttle = MojoX::IOLoop::Throttle->new(
   limit_period => 4,            # do not start more then [limit_period] jobs per [period] seconds
 
   #delay => 0.1,                # simulate (or not) a little latency between shots (timer resolution)
-  cb => $cb,                    # play this callback
 );
 
 my $cb_text =          "[info] I am a job. I have increased our running count (for run_limit).";
-my $drain_once_text =  "\nOoops! limit_period is exhausted. Waiting for the next period";
+my $drain_once_text =  "\nOoops! limit_period or limit is exhausted. Waiting for the next period or finish";
 my $period_text =      "\n[info] Next period. I have dropped a counter for period_limit. But as about limit_run counter - it's not my business";
 
 
 # Events
 $throttle->on(cb      => sub { say $cb_text});
-$throttle->on(finish  => sub { say "Finish!!!!!!!!" });
+$throttle->on(finish  => sub { say "Finish!!!!!!!!"; Mojo::IOLoop->stop; });
 $throttle->on(drain   => sub { print "." });
 $throttle->on(period  => sub { say $period_text });
-$throttle->once(drain => sub { $drain_once_text });
+$throttle->once(drain => sub { say $drain_once_text });
 
 # Play n jobs (run throttle for n times)
-$throttle->begin(scalar @domains);
+$throttle->limit(scalar @domains);
 
 # Let's start
-$throttle->wait;
+$throttle->run($cb);
+Mojo::IOLoop->start;
 
 exit 0;
 
