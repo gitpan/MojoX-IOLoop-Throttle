@@ -1,7 +1,7 @@
 package MojoX::IOLoop::Throttle;
 use Mojo::Base 'Mojo::EventEmitter';
 
-our $VERSION = '0.01_19';
+our $VERSION = '0.01_21';
 $VERSION = eval $VERSION;
 
 
@@ -135,7 +135,7 @@ sub DESTROY {
   warn "Destroing $self\n" if $DEBUG;
 
   $self->drop();
-  $self->SUPER::DESTROY() if SUPER->can('DESTROY');
+  $self->SUPER::DESTROY() if $self->can("SUPER::DESTROY");
   return;
 }
 
