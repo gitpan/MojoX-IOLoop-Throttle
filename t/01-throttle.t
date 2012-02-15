@@ -14,8 +14,8 @@ BEGIN {
   use_ok $CLASS;
 }
 
-
-my $ioloop = $CLASS->new()->ioloop;
+use Mojo::IOLoop;
+my $ioloop = Mojo::IOLoop->singleton;
 
 # TODO: make better calculations
 my $SCALE;
@@ -66,7 +66,7 @@ my $t_lp = $CLASS->new(
   limit_period => 2,
   period       => 0.3 * $SCALE,
 );
-$t_lp->ioloop->timer(0.8 * $SCALE => sub { $t_lp->drop });
+$ioloop->timer(0.8 * $SCALE => sub { $t_lp->drop });
 $t_lp->run(sub { $lp_flag++ });
 $t_lp->on(period => sub { $lp_count++ });
 
@@ -74,12 +74,12 @@ $t_lp->on(period => sub { $lp_count++ });
 # 4 limit_run and 'end' event
 my $lr_flag;
 my $lr = $CLASS->new(limit_run => 3);
-$lr->ioloop->timer(0.5 * $SCALE => sub { $lr->drop });
+$ioloop->timer(0.5 * $SCALE => sub { $lr->drop });
 $lr->run(
   sub {
     my ($thr) = @_;
     $lr_flag++;
-    $thr->ioloop->timer(0.2 * $SCALE => sub { $thr->end; });
+    $ioloop->timer(0.2 * $SCALE => sub { $thr->end; });
   }
 );
 
@@ -99,7 +99,7 @@ my ($finish_count, $finish_flag);
 my $t_finish = $CLASS->new(limit => 2)->run(
   sub {
     my ($t) = @_;
-    $t->ioloop->timer(
+    $ioloop->timer(
       0.1 * $SCALE => sub {
         $finish_count++;
         $t->end();

@@ -1,16 +1,17 @@
 package MojoX::IOLoop::Throttle;
 use Mojo::Base 'Mojo::EventEmitter';
 
-our $VERSION = '0.01_17';
+our $VERSION = '0.01_19';
 $VERSION = eval $VERSION;
 
 
 use Mojo::IOLoop;
 use Carp qw/croak carp/;
+use Scalar::Util 'weaken';
 
 my $DEBUG = $ENV{MOJO_THROTTLE_DEBUG};
 
-has ioloop => sub { Mojo::IOLoop->singleton };
+has iowatcher => sub { Mojo::IOLoop->singleton->iowatcher };
 
 has [qw/is_running /];
 
@@ -40,7 +41,7 @@ sub run {
 
 
   # defaults
-  my $ioloop = $self->ioloop;
+  my $iowatcher = $self->iowatcher;
   $self->{count_period} ||= 0;
   $self->{count_run}    ||= 0;
   $self->{count_total}  ||= 0;
@@ -49,11 +50,11 @@ sub run {
 
   if ($self->{period} && !$self->{period_timer_id}) {
     $self->{period_timer_id} =
-      $ioloop->recurring($self->{period} =>
+      $iowatcher->recurring($self->{period} =>
         sub { $self->{count_period} = 0; $self->emit('period'); });
   }
 
-  $self->{cb_timer_id} = $ioloop->recurring(
+  $self->{cb_timer_id} = $iowatcher->recurring(
     $self->{delay} => sub {
 
 
@@ -158,10 +159,10 @@ sub _stop {
   delete $self->{is_running};
   
   # Clear my timers
-  if (my $loop = $self->ioloop) {
+  if (my $iowatcher = $self->iowatcher) {
     warn "Stopping(Dropping timers)\n"              if $DEBUG;
-    $loop->drop($self->{cb_timer_id})     if $self->{cb_timer_id};
-    $loop->drop($self->{period_timer_id}) if $self->{period_timer_id};
+    $iowatcher->drop($self->{cb_timer_id})     if $self->{cb_timer_id};
+    $iowatcher->drop($self->{period_timer_id}) if $self->{period_timer_id};
   }
   return;
 }
@@ -186,7 +187,7 @@ MojoX::IOLoop::Throttle - throttle Mojo events
 
 =head1 VERSION
 
-Version 0.01_17. (DEV)
+Version 0.01_19. (DEV)
 
 =cut
 
