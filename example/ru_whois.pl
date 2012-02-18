@@ -17,7 +17,7 @@ in parallels with some limitations.
   вызывает событие 'finish'
 
 
-Cмотрите строки 67-94, остальное можно пропустить
+Cмотрите строки 71-96, остальное можно пропустить
 
 =cut
 
@@ -35,6 +35,8 @@ my $RE = qr/registrar:\s*([A-Z0-9-]+)/;
 # Our CallBack
 my $cb = sub {
   my ($thr) = @_;
+  $thr->begin;  
+  
   my $domain = shift @domains;
   say "[info] Starting query for $domain";
 
@@ -44,6 +46,7 @@ my $cb = sub {
       my ($loop, $err, $stream) = @_;
       if ($err) {
         warn "Error processing $domain: $err\n";
+        
         $thr->end;
       }
       $stream->on(read => sub { $text .= $_[1] });
@@ -51,6 +54,7 @@ my $cb = sub {
         close => sub {
           $text =~ $RE;
           say "\nGOT $domain: " . ($1 || " domain is free") . "\n";
+          
           $thr->end();
         }
       );
@@ -73,13 +77,12 @@ my $throttle = MojoX::IOLoop::Throttle->new(
   #delay => 0.1,                # simulate (or not) a little latency between shots (timer resolution)
 );
 
-my $cb_text =          "[info] I am a job. I have increased our running count (for run_limit).";
+
 my $drain_once_text =  "\nOoops! limit_period or limit is exhausted. Waiting for the next period or finish";
 my $period_text =      "\n[info] Next period. I have dropped a counter for period_limit. But as about limit_run counter - it's not my business";
 
 
-# Events
-$throttle->on(cb      => sub { say $cb_text});
+
 $throttle->on(finish  => sub { say "Finish!!!!!!!!"; Mojo::IOLoop->stop; });
 $throttle->on(drain   => sub { print "." });
 $throttle->on(period  => sub { say $period_text });

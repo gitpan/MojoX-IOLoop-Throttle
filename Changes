@@ -1,8 +1,10 @@
 Revision history for MojoX-IOLoop-Throttle
 
+0.01_23   2012-02-18
+        - small bugfix with delay initialisation
+
 0.01_16   2012-02-01
         - many changes.
-
 
 0.01_01    Date/time
         First version, released on an unsuspecting world.
