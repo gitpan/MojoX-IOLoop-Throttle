@@ -17,7 +17,7 @@ in parallels with some limitations.
   вызывает событие 'finish'
 
 
-Cмотрите строки 71-96, остальное можно пропустить
+Cмотрите строки 71-101, остальное можно пропустить
 
 =cut
 
@@ -35,8 +35,8 @@ my $RE = qr/registrar:\s*([A-Z0-9-]+)/;
 # Our CallBack
 my $cb = sub {
   my ($thr) = @_;
-  $thr->begin;  
-  
+  $thr->begin;
+
   my $domain = shift @domains;
   say "[info] Starting query for $domain";
 
@@ -46,7 +46,7 @@ my $cb = sub {
       my ($loop, $err, $stream) = @_;
       if ($err) {
         warn "Error processing $domain: $err\n";
-        
+
         $thr->end;
       }
       $stream->on(read => sub { $text .= $_[1] });
@@ -54,7 +54,7 @@ my $cb = sub {
         close => sub {
           $text =~ $RE;
           say "\nGOT $domain: " . ($1 || " domain is free") . "\n";
-          
+
           $thr->end();
         }
       );
@@ -69,30 +69,35 @@ my $cb = sub {
 
 
 my $throttle = MojoX::IOLoop::Throttle->new(
-  limit_run => 2,               # But allow not more than [limit_run] running (parallel,incomplete) jobs
 
-  period       => 2,            # seconds
-  limit_period => 4,            # do not start more then [limit_period] jobs per [period] seconds
+  # Allow not more than [limit_run] running (parallel,incomplete) jobs
+  limit_run => 2,
 
-  #delay => 0.1,                # simulate (or not) a little latency between shots (timer resolution)
+  # do not start more then [limit_period] jobs per [period] seconds
+  period       => 2,
+  limit_period => 4,
+
+  # you can simulate a little latency between shots (timer resolution)
+  #delay => 0.1,
 );
 
 
-my $drain_once_text =  "\nOoops! limit_period or limit is exhausted. Waiting for the next period or finish";
-my $period_text =      "\n[info] Next period. I have dropped a counter for period_limit. But as about limit_run counter - it's not my business";
+my $drain_once_text =
+  "\nOoops! limit_period or limit is exhausted. Waiting for the next period or finish";
+my $period_text =
+  "\n[info] Next period. I have dropped a counter for period_limit. But as about limit_run counter - it's not my business";
 
 
-
-$throttle->on(finish  => sub { say "Finish!!!!!!!!"; Mojo::IOLoop->stop; });
-$throttle->on(drain   => sub { print "." });
-$throttle->on(period  => sub { say $period_text });
+$throttle->on(finish => sub { say "Finish!!!!!!!!"; Mojo::IOLoop->stop; });
+$throttle->on(drain  => sub { print "." });
+$throttle->on(period => sub { say $period_text });
 $throttle->once(drain => sub { say $drain_once_text });
 
 # Play n jobs (run throttle for n times)
 $throttle->limit(scalar @domains);
 
 # Let's start
-$throttle->run($cb);
+$throttle->run(cb => $cb);
 Mojo::IOLoop->start;
 
 exit 0;

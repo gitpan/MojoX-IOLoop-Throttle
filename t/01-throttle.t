@@ -46,7 +46,7 @@ SCALE: {
 my $t_destroy_flag;
 my $t_destroy = $CLASS->new();
 
-$t_destroy->run(sub { $t_destroy_flag = 'fuck' });
+$t_destroy->run(cb => sub { $t_destroy_flag = 'fuck' });
 
 # call $t_destroy->DESTROY();
 undef $t_destroy;
@@ -56,7 +56,7 @@ my $t_drop_flag;
 my $t_drop = $CLASS->new();
 
 
-$t_drop->run(sub { $t_drop_flag++; shift->drop() });
+$t_drop->run(cb => sub { $t_drop_flag++; shift->drop() });
 
 # 3 'limit_period', 'period' event and 'cb'  in one test! all or nothing
 my $lp_flag;
@@ -66,7 +66,7 @@ my $t_lp = $CLASS->new(
   period       => 0.3 * $SCALE,
 );
 $ioloop->timer(0.8 * $SCALE => sub { $t_lp->drop });
-$t_lp->run(sub { shift->begin; $lp_flag++ });
+$t_lp->run(cb => sub { shift->begin; $lp_flag++ });
 $t_lp->on(period => sub { $lp_count++ });
 
 
@@ -75,7 +75,7 @@ my $lr_flag;
 my $lr = $CLASS->new(limit_run => 3);
 $ioloop->timer(0.5 * $SCALE => sub { $lr->drop });
 $lr->run(
-  sub {
+  cb => sub {
     my ($thr) = @_;
     $thr->begin;
     $lr_flag++;
@@ -85,19 +85,22 @@ $lr->run(
 
 # 5 drain event
 my $drain_flag;
-my $t_drain = $CLASS->new(limit_period => 1)->run(sub { my $t = shift;$t->begin; $t->end });
+my $t_drain =
+  $CLASS->new(limit_period => 1)
+  ->run(cb => sub { my $t = shift; $t->begin; $t->end });
 $t_drain->on(drain => sub { $drain_flag++ });
 
 
 # 6 Здесь мы забыли сделать end. А значит drain не вызовется никогда
 my $drain_flag2;
-my $t_drain2 = $CLASS->new(limit_period => 1)->run(sub { shift->begin; });
+my $t_drain2 =
+  $CLASS->new(limit_period => 1)->run(cb => sub { shift->begin; });
 $t_drain2->on(drain => sub { $drain_flag2++ });
 
 # 7 finish event
 my ($finish_count, $finish_flag);
 my $t_finish = $CLASS->new(limit => 2)->run(
-  sub {
+  cb => sub {
     my ($t) = @_;
     $t->begin;
     $ioloop->timer(
@@ -112,29 +115,27 @@ $t_finish->on(finish => sub { $finish_flag++ });
 
 # 8 no finish without ->end
 my ($nfinish_flag);
-my $t_nfinish = $CLASS->new()->run(sub {;});
+my $t_nfinish = $CLASS->new()->run(cb => sub {;});
 $t_nfinish->on(finish => sub { $nfinish_flag++ });
 
 
 # 9 start twice (nothing with carp)
 my ($t9_count, $t9_carp);
 my $t9 = $CLASS->new(limit_period => 1);
-$t9->run(sub { shift->begin; $t9_count++ ;});
+$t9->run(cb => sub { shift->begin; $t9_count++; });
 $t9->period(0.1 * $SCALE);
 CARP: {
   local $SIG{__WARN__} = sub {
     $t9_carp = shift;
   };
-  $t9->run(sub {;});
+  $t9->run(cb => sub {;});
 }
 
 
 #10 params (для извращенцев)
 my ($t10, $t10_flag);
 $t10 = $CLASS->new(limit => 1);
-$t10->run(sub { my ($self, $par) = @_; $t10_flag = $par }, 'foo');
-
-
+$t10->run(cb => sub { my ($self, $par) = @_; $t10_flag = $par }, 'foo');
 
 
 diag

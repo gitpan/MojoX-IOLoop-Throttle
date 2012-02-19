@@ -1,7 +1,7 @@
 package MojoX::IOLoop::Throttle;
 use Mojo::Base 'Mojo::EventEmitter';
 
-our $VERSION = '0.01_23';
+our $VERSION = '0.01_25';
 $VERSION = eval $VERSION;
 
 
@@ -23,9 +23,11 @@ has autostop => 1;
 
 
 sub run {
-  my ($self, $cb, @params) = @_;
+  my ($self, %args) = @_;
 
-  #croak unless $cb;
+  my $cb = delete $args{cb} or croak 'Usage $thr->run(cb => sub {})';
+
+  # croak unless $cb;
   # Инициализируем стандартными значениями
   $self->period;
   $self->limit_period;
@@ -83,11 +85,12 @@ sub run {
       );
 
       if ($cond) {
+
         #$self->{count_period}++;
         #$self->{count_run}++;
         #$self->{count_total}++;
 
-        $cb->($self, @params);
+        $cb->($self, %args);
 
         return;
 
@@ -152,7 +155,7 @@ sub drop {
   my ($self) = @_;
 
   warn "Dropping $self ...\n" if $DEBUG;
-  
+
   # Clear my timers
   if (my $iowatcher = $self->iowatcher) {
     warn "Stopping(Dropping timers)\n"         if $DEBUG;
@@ -167,7 +170,6 @@ sub drop {
 
   return $self;
 }
-
 
 
 # Увеличивает общий лимит на 1 или $count раз, если $count указан в качестве второго аргумента
@@ -188,28 +190,30 @@ MojoX::IOLoop::Throttle - throttle Mojo events
 
 =head1 VERSION
 
-Version 0.01_23. (DEV)
+Version 0.01_25. (DEV)
 
 =cut
 
 
 =head1 SYNOPSIS
   
-    #!/usr/bin/env perl
+  #!/usr/bin/env perl
   use Mojo::Base -strict;
   use MojoX::IOLoop::Throttle;
   $| = 1;
 
   # New throttle object
   my $throttle = MojoX::IOLoop::Throttle->new(
-    limit_run =>
-      3,  # Allow not more than [limit_run] running (parallel,incomplete) jobs
 
-    period => 2,    # seconds
-    limit_period =>
-      4,    # do not start more than [limit_period] jobs per [period] seconds
+    # Allow not more than [limit_run] running (parallel,incomplete) jobs
+    limit_run => 3,
 
-    delay => 0.05    # Simulate a little latency
+    # do not start more than [limit_period] jobs per [period] seconds
+    period       => 2,
+    limit_period => 4,
+
+    # Simulate a little latency
+    delay => 0.05
   );
 
   my $count;
@@ -224,14 +228,18 @@ Version 0.01_23. (DEV)
 
   # CallBack to throttle
   $throttle->run(
-    sub {
-      my ($thr) = @_;
+    cb => sub {
+      my ($thr, %args) = @_;
+
+      # get an option passed to us
+      my $test = delete $args{test};
 
       # We a beginning one job
       $thr->begin;
 
       my $rand_time = rand() / 5;
-      say "Job $rand_time started";
+      say "Job $rand_time started: $test";
+
       $thr->iowatcher->timer(
         $rand_time => sub {
           say "job $rand_time ended";
@@ -241,11 +249,14 @@ Version 0.01_23. (DEV)
           $thr->end();
         }
       );
-    }
+    },
+
+    # Also we can pass arguments to code
+    test => 'hello'
   );
 
   # Let's start
-  Mojo::IOLoop->start;
+  Mojo::IOLoop->start();
 
 
 
@@ -286,25 +297,33 @@ Increase a limit attr. If agrument is omitter, increase on 1
 
 =head2 C<run>
 
-  $thr->run(sub {...});
+  $thr->run(cb => sub {...}, @other_params);
   
   Starts doing job
 
 =head1 ATTRIBUTES
 
 =head2 C<limit>
-  
+
+total limit of shots
+
 =head2 C<limit_run>
+
+max. number of jobs running in parallell
 
 =head2 C<limit_period>
 
+limit number of shots per some period
+
 =head2 C<period>
+
+time for limit_period
 
 =head2 C<delay>
 
+simulate a lattency (timer resolution)
 
-  
-  
+
 =head1 AUTHOR
 
 Alex, C<< <alexbyk at cpan.org> >>
