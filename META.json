@@ -32,11 +32,11 @@
       },
       "runtime" : {
          "requires" : {
-            "Mojolicious" : "2.46",
+            "Mojolicious" : "2.68",
             "Test::More" : 0
          }
       }
    },
    "release_status" : "testing",
-   "version" : "0.01_25"
+   "version" : "0.01_26"
 }

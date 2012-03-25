@@ -1,7 +1,7 @@
 package MojoX::IOLoop::Throttle;
 use Mojo::Base 'Mojo::EventEmitter';
 
-our $VERSION = '0.01_25';
+our $VERSION = '0.01_26';
 $VERSION = eval $VERSION;
 
 
@@ -11,7 +11,7 @@ use Scalar::Util 'weaken';
 
 my $DEBUG = $ENV{MOJO_THROTTLE_DEBUG};
 
-has iowatcher => sub { Mojo::IOLoop->singleton->iowatcher };
+has iowatcher => sub { Mojo::IOLoop->singleton->reactor };
 
 has [qw/is_running /];
 
@@ -159,8 +159,8 @@ sub drop {
   # Clear my timers
   if (my $iowatcher = $self->iowatcher) {
     warn "Stopping(Dropping timers)\n"         if $DEBUG;
-    $iowatcher->drop($self->{cb_timer_id})     if $self->{cb_timer_id};
-    $iowatcher->drop($self->{period_timer_id}) if $self->{period_timer_id};
+    $iowatcher->remove($self->{cb_timer_id})     if $self->{cb_timer_id};
+    $iowatcher->remove($self->{period_timer_id}) if $self->{period_timer_id};
   }
 
 

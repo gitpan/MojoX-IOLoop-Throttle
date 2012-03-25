@@ -14,7 +14,7 @@ WriteMakefile(
     PL_FILES            => {},
     PREREQ_PM => {
         'Test::More' => 0,
-	'Mojolicious' => '2.46',
+	'Mojolicious' => '2.68',
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => 'MojoX-IOLoop-Throttle-*' },
